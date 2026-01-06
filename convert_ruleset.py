@@ -14,100 +14,54 @@ def download_ruleset(url):
     response.raise_for_status()
     return response.text
 
-def debug_content(content):
-    """调试：显示文件内容的前几行"""
-    lines = content.split('\n')
-    print("\n=== 文件前20行内容 ===")
-    for i, line in enumerate(lines[:20], 1):
-        print(f"{i:3d}: {repr(line)}")
-    print("=" * 50)
-
-def clean_yaml_content(content):
-    """清理YAML内容，移除特殊标记"""
-    # 移除 ! Checksum 这样的特殊标记
-    content = re.sub(r'\s*!\s*Checksum:\s*\S+', '', content)
-    return content
-
-def extract_payload_manually(content):
-    """手动提取payload内容"""
-    print("\n使用手动提取方法...")
-    mihomo_rules = {'payload': []}
+def extract_rules(content):
+    """提取规则"""
+    print("\n开始提取规则...")
+    rules = []
     
     lines = content.split('\n')
-    in_payload = False
     
     for i, line in enumerate(lines, 1):
         stripped = line.strip()
         
-        # 检测 payload 开始
-        if 'payload:' in line.lower():
-            in_payload = True
-            print(f"找到 payload 起始位置: 第 {i} 行")
+        # 跳过空行
+        if not stripped:
             continue
         
-        # 如果在 payload 区域
-        if in_payload:
-            # 检测是否是列表项（以 - 开头，且有缩进）
-            if line.startswith('  -') or line.startswith('- '):
-                # 移除前导的 - 和空格
-                rule = stripped[1:].strip()
-                # 移除引号
-                rule = rule.strip('"').strip("'")
-                if rule:
-                    mihomo_rules['payload'].append(rule)
-            # 如果遇到非缩进且非空的行，可能 payload 结束
-            elif stripped and not line.startswith(' ') and not line.startswith('\t'):
-                # 但要确保不是注释
-                if not stripped.startswith('#'):
-                    print(f"payload 区域可能结束于第 {i} 行: {repr(line)}")
-                    break
+        # 跳过 payload: 行
+        if 'payload:' in line.lower():
+            print(f"跳过第 {i} 行: payload 声明")
+            continue
+        
+        # 跳过以 ! 开头的注释行
+        if stripped.startswith('!'):
+            continue
+        
+        # 检测列表项（以 - 开头）
+        if stripped.startswith('-'):
+            # 移除前导的 - 和空格
+            rule = stripped[1:].strip()
+            # 移除引号
+            rule = rule.strip('"').strip("'")
+            
+            if rule:
+                rules.append(rule)
     
-    print(f"提取到 {len(mihomo_rules['payload'])} 条规则")
-    return mihomo_rules
+    print(f"✓ 成功提取 {len(rules)} 条规则")
+    return rules
 
 def convert_to_mihomo(content):
     """转换为 mihomo 格式"""
-    # 调试：显示原始内容
-    debug_content(content)
+    # 提取规则
+    rules = extract_rules(content)
     
-    # 清理内容
-    cleaned_content = clean_yaml_content(content)
+    if not rules:
+        raise ValueError("未能提取到任何规则")
     
     # mihomo 规则集格式
-    mihomo_rules = {'payload': []}
-    
-    # 尝试标准YAML解析
-    try:
-        print("\n尝试标准 YAML 解析...")
-        data = yaml.safe_load(cleaned_content)
-        
-        if data is None:
-            print("YAML 解析结果为 None")
-            return extract_payload_manually(content)
-        
-        print(f"YAML 解析成功，顶层键: {list(data.keys()) if isinstance(data, dict) else type(data)}")
-        
-        # 提取规则
-        if isinstance(data, dict) and 'payload' in data:
-            if isinstance(data['payload'], list):
-                mihomo_rules['payload'] = data['payload']
-                print(f"从 payload 字段提取到 {len(mihomo_rules['payload'])} 条规则")
-            else:
-                print(f"payload 字段类型不是列表: {type(data['payload'])}")
-        elif isinstance(data, dict) and 'rules' in data:
-            print("尝试从 rules 字段提取...")
-            for rule in data['rules']:
-                if isinstance(rule, str):
-                    mihomo_rules['payload'].append(rule)
-        
-    except yaml.YAMLError as e:
-        print(f"YAML 解析失败: {e}")
-        return extract_payload_manually(content)
-    
-    # 如果标准解析没有得到结果，使用手动提取
-    if not mihomo_rules['payload']:
-        print("标准解析未得到规则，尝试手动提取...")
-        return extract_payload_manually(content)
+    mihomo_rules = {
+        'payload': rules
+    }
     
     return mihomo_rules
 
@@ -115,7 +69,7 @@ def save_ruleset(data, filename):
     """保存规则集到文件"""
     with open(filename, 'w', encoding='utf-8') as f:
         yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    print(f"\n规则集已保存到: {filename}")
+    print(f"✓ 规则集已保存到: {filename}")
 
 def create_readme(rule_count):
     """创建或更新 README"""
@@ -125,7 +79,7 @@ def create_readme(rule_count):
 
 ## 📊 统计信息
 
-- **规则数量**: {rule_count}
+- **规则数量**: {rule_count:,}
 - **最后更新**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
 - **更新频率**: 每24小时自动更新
 
@@ -139,7 +93,7 @@ def create_readme(rule_count):
 
 ## 📖 使用方法
 
-### 方法一：在配置文件中使用
+### 方法一：直接引用（推荐）
 
 在 mihomo 配置文件中添加：
 
@@ -156,11 +110,12 @@ rules:
   - RULE-SET,youtube-ad-block,REJECT
 ```
 
-**注意**: 请替换 `YOUR_USERNAME` 和 `YOUR_REPO` 为你的实际 GitHub 用户名和仓库名。
+**重要**: 请替换 `YOUR_USERNAME` 和 `YOUR_REPO` 为你的实际 GitHub 用户名和仓库名。
 
 ### 方法二：本地使用
 
-下载 `mihomo-ruleset.yaml` 文件到本地，然后在配置中引用：
+1. 下载 [`mihomo-ruleset.yaml`](./mihomo-ruleset.yaml) 到本地
+2. 在配置中引用：
 
 ```yaml
 rule-providers:
@@ -173,13 +128,43 @@ rules:
   - RULE-SET,youtube-ad-block,REJECT
 ```
 
+## 🎯 功能说明
+
+本规则集用于拦截 YouTube 广告相关的域名，包括：
+- YouTube 视频广告服务器
+- Google Video 广告节点
+- 其他 YouTube 广告相关域名
+
+## 🔄 更新机制
+
+- 使用 GitHub Actions 自动化
+- 每天 UTC 0:00（北京时间 8:00）自动运行
+- 自动拉取源规则并转换格式
+- 自动提交更新到仓库
+
+## 📝 规则格式
+
+规则采用域名匹配格式，以 `+.` 开头表示匹配该域名及其所有子域名。
+
+示例：
+```
++.r1---sn-25glen7l.googlevideo.com
++.r1---sn-25glenez.googlevideo.com
+```
+
+## ⚠️ 注意事项
+
+- 规则可能会影响 YouTube 的正常播放，如遇问题请及时反馈
+- 建议配合其他广告拦截规则使用以达到最佳效果
+- 定期检查规则更新以保持最佳拦截效果
+
 ## 🤝 贡献
 
-本项目使用 GitHub Actions 自动更新，无需手动维护。
+欢迎提交 Issue 和 Pull Request！
 
 ## 📄 许可证
 
-本项目仅为格式转换，规则内容版权归原作者所有。
+本项目仅为格式转换工具，规则内容版权归原作者所有。
 
 ---
 
@@ -188,22 +173,26 @@ rules:
     
     with open('README.md', 'w', encoding='utf-8') as f:
         f.write(readme_content)
-    print("README.md 已更新")
+    print("✓ README.md 已更新")
 
 def main():
     try:
+        print("=" * 60)
+        print("Mihomo 规则集转换工具")
+        print("=" * 60)
+        
         # 下载原始规则集
         content = download_ruleset(SOURCE_URL)
+        print(f"✓ 下载成功: {len(content):,} 字符, {len(content.split(chr(10)))} 行")
         
-        print(f"\n下载的内容长度: {len(content)} 字符")
-        print(f"内容行数: {len(content.split(chr(10)))}")
+        # 显示文件预览
+        lines = content.split('\n')
+        print(f"\n📄 文件预览（前5行）:")
+        for i, line in enumerate(lines[:5], 1):
+            print(f"  {i}. {line[:80]}{'...' if len(line) > 80 else ''}")
         
         # 转换为 mihomo 格式
         mihomo_data = convert_to_mihomo(content)
-        
-        # 检查是否有有效数据
-        if not mihomo_data['payload']:
-            raise ValueError("未能提取到任何规则，请检查源文件格式")
         
         # 保存规则集
         save_ruleset(mihomo_data, 'mihomo-ruleset.yaml')
@@ -211,14 +200,22 @@ def main():
         # 创建/更新 README
         create_readme(len(mihomo_data['payload']))
         
-        print(f"\n✅ 转换完成！")
-        print(f"📊 规则总数: {len(mihomo_data['payload'])}")
-        print(f"\n📝 前5条规则示例:")
+        # 显示结果
+        print("\n" + "=" * 60)
+        print("✅ 转换完成！")
+        print("=" * 60)
+        print(f"📊 规则总数: {len(mihomo_data['payload']):,}")
+        print(f"\n📝 规则示例（前5条）:")
         for i, rule in enumerate(mihomo_data['payload'][:5], 1):
             print(f"  {i}. {rule}")
         
         if len(mihomo_data['payload']) > 5:
-            print(f"\n... 还有 {len(mihomo_data['payload']) - 5} 条规则")
+            print(f"  ...")
+            print(f"\n📝 规则示例（后3条）:")
+            for i, rule in enumerate(mihomo_data['payload'][-3:], len(mihomo_data['payload']) - 2):
+                print(f"  {i}. {rule}")
+        
+        print("\n" + "=" * 60)
         
     except Exception as e:
         print(f"\n❌ 错误: {e}")
