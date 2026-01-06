@@ -88,7 +88,7 @@ def create_readme(rule_count):
 - [`mihomo-ruleset.yaml`](./mihomo-ruleset.yaml) - 主规则集文件
 
 ## 🔗 源地址
-
+- 感谢冷漠(https://hosts.trli.club/)
 [ad-youtube-clash-premium.yaml](https://github.com/Potterli20/file/releases/download/ad-youtube-hosts/ad-youtube-clash-premium.yaml)
 
 ## 📖 使用方法
@@ -102,7 +102,7 @@ rule-providers:
   youtube-ad-block:
     type: http
     behavior: domain
-    url: "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/mihomo-ruleset.yaml"
+    url: "https://raw.githubusercontent.com/OpenSourceVision/AD-YouTube/refs/heads/main/mihomo-ruleset.yaml"
     path: ./ruleset/youtube-ad-block.yaml
     interval: 86400
 
@@ -110,7 +110,6 @@ rules:
   - RULE-SET,youtube-ad-block,REJECT
 ```
 
-**重要**: 请替换 `YOUR_USERNAME` 和 `YOUR_REPO` 为你的实际 GitHub 用户名和仓库名。
 
 ### 方法二：本地使用
 
